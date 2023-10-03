@@ -1,5 +1,8 @@
 using Api.Configurations;
 using Data.Context;
+using HealthChecks.UI.Client;
+using Microsoft.AspNetCore.Diagnostics.HealthChecks;
+using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -21,19 +24,42 @@ builder.Services.ResolveDependencies();
 
 builder.Services.AddEndpointsApiExplorer();
 
-builder.Services.AddSwaggerGen();
+builder.Services.AddSwaggerConfiguration();
+
+builder.Services.AddLoggerConfiguration();
+
+builder.Services
+    .AddHealthChecks()
+    .AddSqlServer(builder.Configuration.GetConnectionString("DefaultConnection"), name: "BancoSQL"); // Verifica se o banco está on
+
+builder.Services
+    .AddHealthChecksUI(options => options.AddHealthCheckEndpoint("API com Health Checks", "/api/hc"))
+    .AddInMemoryStorage();
 
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
-    app.UseSwagger();
-    app.UseSwaggerUI();
+    app.UseSwaggerConfiguration(app.Services.GetRequiredService<IApiVersionDescriptionProvider>());
 }
 
 app.UseApiConfiguration();
 
 app.MapControllers();
+
+app.UseLoggerConfiguration(builder);
+
+app.UseHealthChecks("/api/hc", new HealthCheckOptions
+{
+    Predicate = _ => true,
+    ResponseWriter = UIResponseWriter.WriteHealthCheckUIResponse
+});
+
+app.UseHealthChecksUI(options => 
+{
+    options.UIPath = "/api/hc-ui";
+    options.UseRelativeApiPath = false;
+    options.UseRelativeResourcesPath = false;
+});
 
 app.Run();
